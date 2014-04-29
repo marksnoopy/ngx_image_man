@@ -1,0 +1,101 @@
+#!/bin/bash
+
+GM_PATH=/usr/local/service/GraphicsMagick1.3.18/bin/gm
+#LOG_PATH=/usr/local/service/nginx-gm/bash/log
+LOG_PATH=/tmp
+
+# log variable
+LOG_FILE_DATETIME=`date +"%Y%m%d%H"`
+LOG_CONTENT_DATETIME=`date +"%Y-%m-%d %H:%M:%S"`
+
+ERROR_LOG="$LOG_PATH/error_${LOG_FILE_DATETIME}.log"
+RUN_LOG="$LOG_PATH/run_${LOG_FILE_DATETIME}.log"
+
+# image param
+GEOMETRY=$1
+ROTATE=$2
+QUALITY=$3
+ROTATE_TYPE=$4
+GEOMETRY_TYPE=$5
+
+# file and path
+ORIGIN_FILE=$6
+TARGET_FILE=$7
+
+function ErrorLog() {
+    echo "${LOG_CONTENT_DATETIME}\`[ERROR]\`$1" >> $ERROR_LOG
+    exit 1
+}
+
+function AccessLog() {
+    echo "${LOG_CONTENT_DATETIME}\`$1" >> $RUN_LOG
+    exit 0
+}
+
+# gm not found
+if [ ! -f $GM_PATH ]; then
+    ErrorLog "gm bin $GM_PATH can not found."
+fi
+
+if [ "$ORIGIN_FILE" == "" ]; then
+    ErrorLog "origin file is null."
+fi
+
+# origin file not found
+if [ ! -f $ORIGIN_FILE ]; then
+    ErrorLog "origin file $ORIGIN_FILE can not found."
+fi
+
+# create target path
+TARGET_DIR_NAME=`dirname $TARGET_FILE`
+mkdir -p $TARGET_DIR_NAME
+
+# the target file and origin file is same
+if [ "$GEOMETRY$ROTATE$QUALITY$ROTATE_TYPE$GEOMETRY_TYPE" == "00000" ]; then
+    cp -f $ORIGIN_FILE $TARGET_FILE
+    AccessLog "cp -f $ORIGIN_FILE $TARGET_FILE" 
+fi
+
+# shell to run
+CMD="$GM_PATH convert $ORIGIN_FILE"
+
+if [ "$QUALITY" != "0" ]; then
+    CMD="$CMD -quality $QUALITY"
+fi
+
+if [ "$ROTATE_TYPE" == "1" ]; then
+    CMD="$CMD -rotate $ROTATE "
+fi
+
+ORIGIN_GEOMETRY=`$GM_PATH identify -verbose $ORIGIN_FILE | grep Geometry | grep Geometry | awk -F':' '{print $2}' |  sed 's/^ //;s/ $//'` 
+
+if [ "$ORIGIN_GEOMETRY" == "" ]; then
+    ErrorLog "can not get the geometry of the file $ORIGIN_FILE." 
+fi
+
+WIDTH=`echo $ORIGIN_GEOMETRY | awk -F'x' '{print $1}'`
+HEIGHT=`echo $ORIGIN_GEOMETRY | awk -F'x' '{print $2}'`
+
+if [ "$ROTATE_TYPE" == "0" ] && [ $WIDTH -gt $HEIGHT ]; then
+    CMD="$CMD -rotate $ROTATE"
+fi
+
+if [ "$GEOMETRY" != "0" ]; then
+    CMD="$CMD -resize  "
+    TARGET_WIDTH=`echo $GEOMETRY | awk -F'x' '{print $1}'`
+    TARGET_HEIGHT=`echo $GEOMETRY | awk -F'x' '{print $2}'`
+
+    if [ "$GEOMETRY_TYPE" == "0" ]; then
+        CMD="${CMD}${GEOMETRY}"
+    elif [ "$GEOMETRY_TYPE" == "w" ]; then
+        CMD="$CMD ${TARGET_WIDTH}"
+    elif [ "$GEOMETRY_TYPE" == "h" ]; then
+        CMD="$CMD x${TARGET_HEIGHT}"
+    else
+        CMD="$CMD ${GEOMETRY}${GEOMETRY_TYPE}"
+    fi
+fi
+
+CMD="$CMD $TARGET_FILE"
+$CMD
+AccessLog "$CMD"
